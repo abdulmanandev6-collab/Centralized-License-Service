@@ -42,3 +42,8 @@ class AddProductToLicenseRequestSerializer(serializers.Serializer):
     expiration_date = serializers.DateTimeField(required=False, allow_null=True)
     max_seats = serializers.IntegerField(required=False, allow_null=True, min_value=1)
 
+
+class ActivateLicenseRequestSerializer(serializers.Serializer):
+    instance_id = serializers.CharField(required=True, max_length=255)
+    product_slug = serializers.CharField(required=True)
+
