@@ -12,7 +12,8 @@ from licenses.models import Brand, Product, LicenseKey, License, LicenseStatus, 
 from licenses.serializers import (
     ProvisionLicenseRequestSerializer,
     AddProductToLicenseRequestSerializer,
-    LicenseSerializer
+    LicenseSerializer,
+    UpdateLicenseLifecycleSerializer
 )
 from licenses.utils import generate_license_key
 import logging
@@ -260,6 +261,86 @@ class ListLicensesByEmailView(APIView):
             logger.error(f'Error listing licenses by email: {str(e)}', exc_info=True)
             return Response(
                 {'error': 'Failed to retrieve licenses'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class UpdateLicenseLifecycleView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def patch(self, request, license_id):
+        brand = request.user
+        
+        try:
+            lic = License.objects.select_related('license_key__brand', 'product').get(id=license_id)
+        except License.DoesNotExist:
+            return Response(
+                {'error': 'License not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        if lic.license_key.brand != brand:
+            return Response(
+                {'error': 'License does not belong to your brand'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer = UpdateLicenseLifecycleSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        
+        action = serializer.validated_data['action']
+        
+        try:
+            with transaction.atomic():
+                if action == 'renew':
+                    exp_date = serializer.validated_data.get('expiration_date')
+                    if isinstance(exp_date, str):
+                        exp_date = exp_date.replace('Z', '+00:00')
+                        exp_date = timezone.make_aware(datetime.fromisoformat(exp_date))
+                    elif exp_date and not timezone.is_aware(exp_date):
+                        exp_date = timezone.make_aware(exp_date)
+                    
+                    lic.expiration_date = exp_date
+                    if lic.status == LicenseStatus.SUSPENDED:
+                        lic.status = LicenseStatus.VALID
+                    lic.save()
+                    logger.info(f'Renewed {license_id} until {exp_date}')
+                    
+                elif action == 'suspend':
+                    if lic.status == LicenseStatus.CANCELLED:
+                        return Response(
+                            {'error': 'Cannot suspend cancelled license'},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    lic.status = LicenseStatus.SUSPENDED
+                    lic.save()
+                    logger.info(f'Suspended {license_id}')
+                    
+                elif action == 'resume':
+                    if lic.status != LicenseStatus.SUSPENDED:
+                        return Response(
+                            {'error': 'License is not suspended'},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    lic.status = LicenseStatus.VALID
+                    lic.save()
+                    logger.info(f'Resumed {license_id}')
+                    
+                elif action == 'cancel':
+                    lic.status = LicenseStatus.CANCELLED
+                    lic.save()
+                    logger.info(f'Cancelled {license_id}')
+                
+                return Response({
+                    'message': f'License {action}ed successfully',
+                    'license': LicenseSerializer(lic).data
+                }, status=status.HTTP_200_OK)
+                
+        except Exception as e:
+            logger.error(f'Error updating license: {str(e)}', exc_info=True)
+            return Response(
+                {'error': 'Failed to update license'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
