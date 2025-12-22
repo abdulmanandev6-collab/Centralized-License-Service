@@ -48,6 +48,11 @@ class ActivateLicenseRequestSerializer(serializers.Serializer):
     product_slug = serializers.CharField(required=True)
 
 
+class DeactivateSeatRequestSerializer(serializers.Serializer):
+    instance_id = serializers.CharField(required=True, max_length=255)
+    product_slug = serializers.CharField(required=True)
+
+
 class UpdateLicenseLifecycleSerializer(serializers.Serializer):
     action = serializers.ChoiceField(choices=['renew', 'suspend', 'resume', 'cancel'], required=True)
     expiration_date = serializers.DateTimeField(required=False, allow_null=True)

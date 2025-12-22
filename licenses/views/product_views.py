@@ -6,8 +6,9 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
+from django.utils import timezone
 from licenses.models import LicenseKey, License, Activation
-from licenses.serializers import ActivateLicenseRequestSerializer
+from licenses.serializers import ActivateLicenseRequestSerializer, DeactivateSeatRequestSerializer
 import logging
 
 logger = logging.getLogger(__name__)
@@ -142,6 +143,77 @@ class CheckLicenseStatusView(APIView):
             logger.error(f'Error checking license status: {str(e)}', exc_info=True)
             return Response(
                 {'error': 'Failed to check license status'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class DeactivateSeatView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        lk = request.user
+        
+        serializer = DeactivateSeatRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        
+        instance_id = serializer.validated_data['instance_id']
+        product_slug = serializer.validated_data['product_slug']
+        
+        try:
+            lic = License.objects.filter(
+                license_key=lk,
+                product__slug=product_slug,
+                product__is_active=True
+            ).first()
+            
+            if not lic:
+                return Response(
+                    {'error': f'License for "{product_slug}" not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            with transaction.atomic():
+                act = Activation.objects.filter(
+                    license=lic,
+                    instance_id=instance_id,
+                    is_active=True
+                ).first()
+                
+                if not act:
+                    return Response(
+                        {'error': 'No active activation found for this instance'},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+                
+                Activation.objects.filter(id=act.id).update(
+                    is_active=False,
+                    deactivated_at=timezone.now()
+                )
+                
+                active = Activation.objects.filter(
+                    license=lic,
+                    is_active=True
+                ).count()
+                
+                remaining = None
+                if lic.max_seats:
+                    remaining = lic.max_seats - active
+                
+                logger.info(f'Deactivated {instance_id} for {lic.id}')
+                
+                return Response({
+                    'message': 'Seat deactivated successfully',
+                    'instance_id': instance_id,
+                    'product': lic.product.name,
+                    'deactivated_at': timezone.now(),
+                    'remaining_seats': remaining
+                }, status=status.HTTP_200_OK)
+                
+        except Exception as e:
+            logger.error(f'Error deactivating seat: {str(e)}', exc_info=True)
+            return Response(
+                {'error': 'Failed to deactivate seat'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
