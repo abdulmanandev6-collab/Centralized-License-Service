@@ -24,6 +24,11 @@ class Brand(models.Model):
 
     def __str__(self):
         return self.name
+    
+    @property
+    def is_authenticated(self):
+        """Required by DRF's IsAuthenticated permission."""
+        return True
 
 
 class Product(models.Model):
@@ -70,6 +75,11 @@ class LicenseKey(models.Model):
 
     def __str__(self):
         return f"{self.key} ({self.brand.name})"
+    
+    @property
+    def is_authenticated(self):
+        """Required by DRF's IsAuthenticated permission."""
+        return True
 
 
 class LicenseStatus(models.TextChoices):
