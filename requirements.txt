@@ -4,4 +4,13 @@ django-cors-headers==4.3.1
 python-decouple==3.8
 psycopg2-binary==2.9.9
 python-dotenv==1.0.0
+drf-yasg==1.21.7
+
+# Development dependencies
+black==23.12.1
+flake8==7.0.0
+isort==5.13.2
+pytest==7.4.4
+pytest-django==4.8.0
+pytest-cov==4.1.0
 

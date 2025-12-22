@@ -7,6 +7,8 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.utils import timezone
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 from licenses.models import LicenseKey, License, Activation
 from licenses.serializers import ActivateLicenseRequestSerializer, DeactivateSeatRequestSerializer
 import logging
@@ -17,6 +19,32 @@ logger = logging.getLogger(__name__)
 class ActivateLicenseView(APIView):
     permission_classes = [IsAuthenticated]
     
+    @swagger_auto_schema(
+        operation_summary='US 3: Activate License',
+        operation_description='Activates the license for a specific site or instance. Uses up a seat if there\'s a limit.\n\n**What is instance_id?**\n- Your website URL (e.g., https://mysite.com)\n- Your domain name (e.g., mysite.com)\n- A machine/device ID (e.g., machine-12345)\n\n**What is product_slug?**\n- The product identifier from your license (e.g., "rankmath", "wprocket")\n- Check your license status endpoint to see available products',
+        tags=['US 3: License Activation'],
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['instance_id', 'product_slug'],
+            properties={
+                'instance_id': openapi.Schema(type=openapi.TYPE_STRING, description='Your site URL, domain, or machine ID where the product is installed (e.g., https://mysite.com, mysite.com, or machine-12345)', example='https://mysite.com'),
+                'product_slug': openapi.Schema(type=openapi.TYPE_STRING, description='Product slug from your license (e.g., rankmath, wprocket). Check your license status to see available products.', example='rankmath'),
+            },
+            example={
+                'instance_id': 'https://mysite.com',
+                'product_slug': 'rankmath'
+            }
+        ),
+        responses={
+            201: 'Success',
+            200: 'Success',
+            400: 'Bad request',
+            403: 'Forbidden',
+            404: 'Not found',
+        },
+        security=[{'X-License-Key': []}],
+        operation_id='product_activate_create'
+    )
     def post(self, request):
         lk = request.user
         
@@ -55,6 +83,7 @@ class ActivateLicenseView(APIView):
                 
                 if existing:
                     return Response({
+                        'status': 'success',
                         'message': 'Already activated for this instance',
                         'activation_id': str(existing.id),
                         'instance_id': existing.instance_id,
@@ -85,6 +114,7 @@ class ActivateLicenseView(APIView):
                     remaining = license_obj.max_seats - active_count - 1
                 
                 return Response({
+                    'status': 'success',
                     'message': 'License activated successfully',
                     'activation_id': str(activation.id),
                     'instance_id': activation.instance_id,
@@ -104,6 +134,17 @@ class ActivateLicenseView(APIView):
 class CheckLicenseStatusView(APIView):
     permission_classes = [IsAuthenticated]
     
+    @swagger_auto_schema(
+        operation_summary='US 4: Check License Status',
+        operation_description='See what licenses you have, their status, and how many seats are left.',
+        tags=['US 4: License Status Check'],
+        responses={
+            200: 'Success',
+            403: 'Invalid license key',
+        },
+        security=[{'X-License-Key': []}],
+        operation_id='product_check_list'
+    )
     def get(self, request):
         lk = request.user
         
@@ -150,6 +191,29 @@ class CheckLicenseStatusView(APIView):
 class DeactivateSeatView(APIView):
     permission_classes = [IsAuthenticated]
     
+    @swagger_auto_schema(
+        operation_summary='US 5: Deactivate Seat',
+        operation_description='Deactivate an activation to free up a seat. Useful when moving to a new site.',
+        tags=['US 5: Seat Deactivation'],
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['instance_id', 'product_slug'],
+            properties={
+                'instance_id': openapi.Schema(type=openapi.TYPE_STRING, description='The instance to deactivate', example='https://oldsite.com'),
+                'product_slug': openapi.Schema(type=openapi.TYPE_STRING, description='Product slug', example='rankmath'),
+            },
+            example={
+                'instance_id': 'https://oldsite.com',
+                'product_slug': 'rankmath'
+            }
+        ),
+        responses={
+            200: 'Success',
+            404: 'Not found',
+        },
+        security=[{'X-License-Key': []}],
+        operation_id='product_deactivate_create'
+    )
     def post(self, request):
         lk = request.user
         
@@ -203,6 +267,7 @@ class DeactivateSeatView(APIView):
                 logger.info(f'Deactivated {instance_id} for {lic.id}')
                 
                 return Response({
+                    'status': 'success',
                     'message': 'Seat deactivated successfully',
                     'instance_id': instance_id,
                     'product': lic.product.name,

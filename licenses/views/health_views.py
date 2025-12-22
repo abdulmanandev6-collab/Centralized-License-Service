@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.db import connection
+from drf_yasg.utils import swagger_auto_schema
 
 
 class HealthCheckView(APIView):
@@ -14,6 +15,15 @@ class HealthCheckView(APIView):
     permission_classes = []
     authentication_classes = []
     
+    @swagger_auto_schema(
+        operation_summary='Health Check',
+        operation_description='Check service health and database connection',
+        tags=['Z. Health Check'],
+        responses={
+            200: 'Success',
+            503: 'Service unavailable',
+        },
+    )
     def get(self, request):
         try:
             # Check database connection

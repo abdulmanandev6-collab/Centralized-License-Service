@@ -31,7 +31,22 @@ class LicenseKeyAuthentication(authentication.BaseAuthentication):
     End-user products use this to activate and validate licenses.
     """
     def authenticate(self, request):
-        license_key = request.META.get('HTTP_X_LICENSE_KEY') or request.META.get('X_LICENSE_KEY')
+        license_key = None
+        
+        # Check META (Django's standard way)
+        license_key = request.META.get('HTTP_X_LICENSE_KEY')
+        
+        # Check alternative META formats
+        if not license_key:
+            license_key = request.META.get('X_LICENSE_KEY')
+        
+        # Check request.headers (DRF way)
+        if not license_key and hasattr(request, 'headers'):
+            license_key = request.headers.get('X-License-Key') or request.headers.get('X_LICENSE_KEY')
+        
+        # Clean up the key
+        if license_key:
+            license_key = license_key.strip()
         
         if not license_key:
             return None

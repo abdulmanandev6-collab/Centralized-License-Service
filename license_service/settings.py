@@ -33,7 +33,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'corsheaders',
-    'licenses',  # Our main app
+    'drf_yasg',
+    'licenses',
 ]
 
 MIDDLEWARE = [
@@ -185,5 +186,24 @@ LOGGING = {
             'propagate': False,
         },
     },
+}
+
+# Swagger/OpenAPI settings
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'X-API-Key': {
+            'type': 'apiKey',
+            'in': 'header',
+            'name': 'X-API-Key',
+            'description': 'API key for brand authentication'
+        },
+        'X-License-Key': {
+            'type': 'apiKey',
+            'in': 'header',
+            'name': 'X-License-Key',
+            'description': 'License key for product authentication. Example: GHX6-889J-WUIE-02R2'
+        }
+    },
+    'USE_SESSION_AUTH': False,
 }
 

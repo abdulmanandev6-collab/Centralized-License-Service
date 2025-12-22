@@ -8,6 +8,8 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.utils import timezone
 from datetime import datetime
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 from licenses.models import Brand, Product, LicenseKey, License, LicenseStatus, Activation
 from licenses.serializers import (
     ProvisionLicenseRequestSerializer,
@@ -22,12 +24,49 @@ logger = logging.getLogger(__name__)
 
 
 class ProvisionLicenseView(APIView):
-    """
-    US1: Brand can provision a license
-    Creates a license key and license(s) for a customer email.
-    """
     permission_classes = [IsAuthenticated]
     
+    @swagger_auto_schema(
+        operation_summary='US 1: Provision License',
+        operation_description='Creates a new license key and licenses for a customer. You can add multiple products at once.',
+        tags=['US 1: Brand Provision License'],
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['customer_email', 'products'],
+            properties={
+                'customer_email': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_EMAIL, description='Customer email', example='john@example.com'),
+                'products': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    description='Products to create licenses for',
+                    items=openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        required=['slug'],
+                        properties={
+                            'slug': openapi.Schema(type=openapi.TYPE_STRING, description='Product slug (e.g., rankmath)', example='rankmath'),
+                            'expiration_date': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME, description='When license expires (optional)', example='2025-12-31T23:59:59Z'),
+                            'max_seats': openapi.Schema(type=openapi.TYPE_INTEGER, description='Max activations (optional)', example=5),
+                        }
+                    )
+                )
+            },
+            example={
+                'customer_email': 'john@example.com',
+                'products': [
+                    {
+                        'slug': 'rankmath',
+                        'expiration_date': '2025-12-31T23:59:59Z',
+                        'max_seats': 3
+                    }
+                ]
+            }
+        ),
+        responses={
+            201: 'Success',
+            400: 'Bad request',
+            404: 'Not found',
+        },
+        security=[{'X-API-Key': []}]
+    )
     def post(self, request):
         brand = request.user
         
@@ -40,7 +79,6 @@ class ProvisionLicenseView(APIView):
         
         try:
             with transaction.atomic():
-                # Reuse existing license key for same brand+email, or create new one
                 license_key_obj, created = LicenseKey.objects.get_or_create(
                     brand=brand,
                     customer_email=customer_email,
@@ -80,11 +118,17 @@ class ProvisionLicenseView(APIView):
                     if exp_date:
                         if isinstance(exp_date, str):
                             try:
-                                exp_date = exp_date.replace('Z', '+00:00')
-                                exp_date = timezone.make_aware(datetime.fromisoformat(exp_date))
-                            except (ValueError, AttributeError):
+                                if exp_date.endswith('Z'):
+                                    exp_date = exp_date[:-1] + '+00:00'
+                                elif '+' not in exp_date and 'T' in exp_date:
+                                    exp_date = exp_date + '+00:00'
+                                exp_date = datetime.fromisoformat(exp_date)
+                                if not timezone.is_aware(exp_date):
+                                    exp_date = timezone.make_aware(exp_date)
+                            except (ValueError, AttributeError) as e:
+                                logger.error(f'Date parsing error: {e}, input: {exp_date}')
                                 return Response(
-                                    {'error': f'Invalid expiration_date format for {product_slug}'},
+                                    {'error': f'Invalid expiration_date format for {product_slug}. Use ISO 8601 format (e.g., 2025-12-31T23:59:59Z)'},
                                     status=status.HTTP_400_BAD_REQUEST
                                 )
                         elif not timezone.is_aware(exp_date):
@@ -100,6 +144,8 @@ class ProvisionLicenseView(APIView):
                     created_licenses.append(LicenseSerializer(new_license).data)
                 
                 result = {
+                    'status': 'success',
+                    'message': 'License provisioned successfully',
                     'license_key': license_key_obj.key,
                     'customer_email': license_key_obj.customer_email,
                     'brand': brand.name,
@@ -127,11 +173,28 @@ class ProvisionLicenseView(APIView):
 
 
 class AddProductToLicenseKeyView(APIView):
-    """
-    US1: Add a product license to an existing license key
-    """
     permission_classes = [IsAuthenticated]
     
+    @swagger_auto_schema(
+        operation_summary='US 1: Add Product to License Key',
+        operation_description='Adds another product license to an existing license key. Useful when customer buys an addon.',
+        tags=['US 1: Brand Provision License'],
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['product_slug'],
+            properties={
+                'product_slug': openapi.Schema(type=openapi.TYPE_STRING, description='Product to add', example='content-ai'),
+                'expiration_date': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME, description='Optional expiration', example='2025-12-31T23:59:59Z'),
+                'max_seats': openapi.Schema(type=openapi.TYPE_INTEGER, description='Optional seat limit', example=5),
+            },
+            example={'product_slug': 'content-ai', 'expiration_date': '2025-12-31T23:59:59Z', 'max_seats': 5}
+        ),
+        manual_parameters=[
+            openapi.Parameter('license_key', openapi.IN_PATH, type=openapi.TYPE_STRING, description='Existing license key', required=True, example='ABCD-1234-EFGH-5678'),
+        ],
+        responses={201: 'Success', 400: 'Bad request', 404: 'Not found'},
+        security=[{'X-API-Key': []}]
+    )
     def post(self, request, license_key):
         brand = request.user
         
@@ -189,9 +252,10 @@ class AddProductToLicenseKeyView(APIView):
             )
             
             return Response({
+                'status': 'success',
+                'message': 'Product added successfully',
                 'license_key': lk.key,
-                'license': LicenseSerializer(new_license).data,
-                'message': 'Product added successfully'
+                'license': LicenseSerializer(new_license).data
             }, status=status.HTTP_201_CREATED)
             
         except Exception as e:
@@ -205,6 +269,16 @@ class AddProductToLicenseKeyView(APIView):
 class ListLicensesByEmailView(APIView):
     permission_classes = [IsAuthenticated]
     
+    @swagger_auto_schema(
+        operation_summary='US 6: List Licenses by Email',
+        operation_description='Get all licenses for a customer across all brands. Useful for customer support.',
+        tags=['US 6: Cross-Brand License Query'],
+        manual_parameters=[
+            openapi.Parameter('email', openapi.IN_QUERY, type=openapi.TYPE_STRING, format=openapi.FORMAT_EMAIL, description='Customer email', required=True, example='user@example.com'),
+        ],
+        responses={200: 'Success', 400: 'Bad request'},
+        security=[{'X-API-Key': []}]
+    )
     def get(self, request):
         email = request.query_params.get('email')
         
@@ -268,6 +342,40 @@ class ListLicensesByEmailView(APIView):
 class UpdateLicenseLifecycleView(APIView):
     permission_classes = [IsAuthenticated]
     
+    @swagger_auto_schema(
+        operation_summary='US 2: Update License Lifecycle',
+        operation_description='Change license status - suspend, resume, cancel, or extend expiration',
+        tags=['US 2: License Lifecycle Management'],
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['action'],
+            properties={
+                'action': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    enum=['renew', 'suspend', 'resume', 'cancel'],
+                    description='What to do with the license',
+                    example='suspend'
+                ),
+                'expiration_date': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format=openapi.FORMAT_DATETIME,
+                    description='New expiration date (needed for renew)',
+                    example='2026-12-31T23:59:59Z'
+                ),
+            },
+            example={'action': 'suspend'}
+        ),
+        manual_parameters=[
+            openapi.Parameter('license_id', openapi.IN_PATH, description='License ID', type=openapi.TYPE_STRING, format=openapi.FORMAT_UUID, required=True),
+        ],
+        responses={
+            200: 'Success',
+            400: 'Bad request',
+            403: 'Forbidden',
+            404: 'Not found',
+        },
+        security=[{'X-API-Key': []}]
+    )
     def patch(self, request, license_id):
         brand = request.user
         
@@ -333,6 +441,7 @@ class UpdateLicenseLifecycleView(APIView):
                     logger.info(f'Cancelled {license_id}')
                 
                 return Response({
+                    'status': 'success',
                     'message': f'License {action}ed successfully',
                     'license': LicenseSerializer(lic).data
                 }, status=status.HTTP_200_OK)
