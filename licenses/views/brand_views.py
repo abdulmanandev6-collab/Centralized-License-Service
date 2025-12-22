@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.utils import timezone
 from datetime import datetime
-from licenses.models import Brand, Product, LicenseKey, License, LicenseStatus
+from licenses.models import Brand, Product, LicenseKey, License, LicenseStatus, Activation
 from licenses.serializers import (
     ProvisionLicenseRequestSerializer,
     AddProductToLicenseRequestSerializer,
@@ -202,12 +202,64 @@ class AddProductToLicenseKeyView(APIView):
 
 
 class ListLicensesByEmailView(APIView):
-    """
-    US6: Brands can list licenses by customer email across all brands
-    """
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        # Implementation will be added in US6
-        return Response({'message': 'To be implemented'}, status=status.HTTP_501_NOT_IMPLEMENTED)
+        email = request.query_params.get('email')
+        
+        if not email:
+            return Response(
+                {'error': 'Email parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            keys = LicenseKey.objects.filter(
+                customer_email=email
+            ).select_related('brand').prefetch_related('licenses__product')
+            
+            if not keys.exists():
+                return Response({
+                    'email': email,
+                    'licenses': []
+                }, status=status.HTTP_200_OK)
+            
+            result = []
+            for key in keys:
+                for lic in key.licenses.all():
+                    active = Activation.objects.filter(
+                        license=lic,
+                        is_active=True
+                    ).count()
+                    
+                    remaining = None
+                    if lic.max_seats:
+                        remaining = max(0, lic.max_seats - active)
+                    
+                    result.append({
+                        'license_key': key.key,
+                        'brand': key.brand.name,
+                        'product': lic.product.name,
+                        'product_slug': lic.product.slug,
+                        'status': lic.status,
+                        'is_valid': lic.is_valid,
+                        'expiration_date': lic.expiration_date,
+                        'max_seats': lic.max_seats,
+                        'active_seats': active,
+                        'remaining_seats': remaining,
+                        'created_at': lic.created_at
+                    })
+            
+            return Response({
+                'email': email,
+                'total_licenses': len(result),
+                'licenses': result
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f'Error listing licenses by email: {str(e)}', exc_info=True)
+            return Response(
+                {'error': 'Failed to retrieve licenses'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 

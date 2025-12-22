@@ -101,12 +101,47 @@ class ActivateLicenseView(APIView):
 
 
 class CheckLicenseStatusView(APIView):
-    """
-    US4: User can check license status
-    """
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        # Implementation will be added in US4
-        return Response({'message': 'To be implemented'}, status=status.HTTP_501_NOT_IMPLEMENTED)
+        lk = request.user
+        
+        try:
+            licenses = License.objects.filter(license_key=lk).select_related('product')
+            
+            licenses_data = []
+            for lic in licenses:
+                active_count = Activation.objects.filter(
+                    license=lic,
+                    is_active=True
+                ).count()
+                
+                remaining = None
+                if lic.max_seats is not None:
+                    remaining = max(0, lic.max_seats - active_count)
+                
+                licenses_data.append({
+                    'product': lic.product.name,
+                    'product_slug': lic.product.slug,
+                    'status': lic.status,
+                    'is_valid': lic.is_valid,
+                    'expiration_date': lic.expiration_date,
+                    'max_seats': lic.max_seats,
+                    'active_seats': active_count,
+                    'remaining_seats': remaining
+                })
+            
+            return Response({
+                'license_key': lk.key,
+                'customer_email': lk.customer_email,
+                'brand': lk.brand.name,
+                'licenses': licenses_data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f'Error checking license status: {str(e)}', exc_info=True)
+            return Response(
+                {'error': 'Failed to check license status'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
