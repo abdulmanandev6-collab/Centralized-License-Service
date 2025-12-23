@@ -20,7 +20,7 @@ class HealthCheckView(APIView):
     @swagger_auto_schema(
         operation_summary="Health Check",
         operation_description="Check service health and database connection",
-        tags=["Z. Health Check"],
+        tags=["Health Check"],
         responses={
             200: "Success",
             503: "Service unavailable",

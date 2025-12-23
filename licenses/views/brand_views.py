@@ -30,9 +30,9 @@ class ProvisionLicenseView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="US 1: Provision License",
+        operation_summary="Provision License",
         operation_description="Creates a new license key and licenses for a customer. You can add multiple products at once.",
-        tags=["US 1: Brand Provision License"],
+        tags=["Brand Provision License"],
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             required=["customer_email", "products"],
@@ -200,9 +200,9 @@ class AddProductToLicenseKeyView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="US 1: Add Product to License Key",
+        operation_summary="Add Product to License Key",
         operation_description="Adds another product license to an existing license key. Useful when customer buys an addon.",
-        tags=["US 1: Brand Provision License"],
+        tags=["Brand Provision License"],
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             required=["product_slug"],
@@ -316,9 +316,9 @@ class ListLicensesByEmailView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="US 6: List Licenses by Email",
+        operation_summary="List Licenses by Email",
         operation_description="Get all licenses for a customer across all brands. Useful for customer support.",
-        tags=["US 6: Cross-Brand License Query"],
+        tags=["Cross-Brand License Query"],
         manual_parameters=[
             openapi.Parameter(
                 "email",
@@ -393,9 +393,9 @@ class UpdateLicenseLifecycleView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="US 2: Update License Lifecycle",
+        operation_summary="Update License Lifecycle",
         operation_description="Change license status - suspend, resume, cancel, or extend expiration",
-        tags=["US 2: License Lifecycle Management"],
+        tags=["License Lifecycle Management"],
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             required=["action"],

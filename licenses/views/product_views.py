@@ -23,9 +23,9 @@ class ActivateLicenseView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="US 3: Activate License",
+        operation_summary="Activate License",
         operation_description='Activates the license for a specific site or instance. Uses up a seat if there\'s a limit.\n\n**What is instance_id?**\n- Your website URL (e.g., https://mysite.com)\n- Your domain name (e.g., mysite.com)\n- A machine/device ID (e.g., machine-12345)\n\n**What is product_slug?**\n- The product identifier from your license (e.g., "rankmath", "wprocket")\n- Check your license status endpoint to see available products',
-        tags=["US 3: License Activation"],
+        tags=["License Activation"],
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             required=["instance_id", "product_slug"],
@@ -142,9 +142,9 @@ class CheckLicenseStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="US 4: Check License Status",
+        operation_summary="Check License Status",
         operation_description="See what licenses you have, their status, and how many seats are left.",
-        tags=["US 4: License Status Check"],
+        tags=["License Status Check"],
         responses={
             200: "Success",
             403: "Invalid license key",
@@ -201,9 +201,9 @@ class DeactivateSeatView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="US 5: Deactivate Seat",
+        operation_summary="Deactivate Seat",
         operation_description="Deactivate an activation to free up a seat. Useful when moving to a new site.",
-        tags=["US 5: Seat Deactivation"],
+        tags=["Seat Deactivation"],
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             required=["instance_id", "product_slug"],
