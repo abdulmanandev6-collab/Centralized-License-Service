@@ -11,7 +11,6 @@ def generate_license_key():
     chars = string.ascii_uppercase + string.digits
     parts = []
     for i in range(4):
-        part = ''.join(secrets.choice(chars) for _ in range(4))
+        part = "".join(secrets.choice(chars) for _ in range(4))
         parts.append(part)
-    return '-'.join(parts)
-
+    return "-".join(parts)
